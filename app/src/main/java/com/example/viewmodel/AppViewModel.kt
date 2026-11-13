@@ -4,8 +4,11 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
+import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
-import com.example.R
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -47,183 +50,260 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val allDeposits = depositDao.getAllDepositsWithUsers()
     val allWithdrawals = withdrawalDao.getAllWithdrawalsWithUsers()
 
-    private val firestore = FirebaseFirestore.getInstance()
+    private val firestore: FirebaseFirestore? by lazy {
+        try {
+            if (FirebaseApp.getApps(getApplication()).isEmpty()) {
+                FirebaseApp.initializeApp(getApplication())
+            }
+            if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
+                FirebaseFirestore.getInstance()
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
 
-    init {
+    private val firebaseAuth: FirebaseAuth? by lazy {
+        try {
+            if (FirebaseApp.getApps(getApplication()).isEmpty()) {
+                FirebaseApp.initializeApp(getApplication())
+            }
+            if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
+                FirebaseAuth.getInstance()
+            } else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun DocumentSnapshot.getLongSafe(field: String): Long? =
+        try { (get(field) as? Number)?.toLong() } catch (e: Exception) { null }
+
+    private fun DocumentSnapshot.getDoubleSafe(field: String, default: Double = 0.0): Double =
+        try { (get(field) as? Number)?.toDouble() ?: default } catch (e: Exception) { default }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private fun observeCurrentUserUpdates() {
         viewModelScope.launch {
             try {
+                _currentUser
+                    .map { it?.id }
+                    .distinctUntilChanged()
+                    .flatMapLatest { id ->
+                        if (id == null) flowOf(null) else userDao.observeUser(id)
+                    }
+                    .collect { updated ->
+                        if (updated != null) {
+                            _currentUser.value = updated
+                        }
+                    }
+            } catch (e: Exception) {
+                // Safely ignore observation errors
+            }
+        }
+    }
+
+    init {
+        observeCurrentUserUpdates()
+        viewModelScope.launch {
+            try {
+                val fs = firestore
                 // Listen to Firestore tournaments for cross-device real-time sync
-                firestore.collection("tournaments").addSnapshotListener { snapshot, e ->
+                fs?.collection("tournaments")?.addSnapshotListener { snapshot, e ->
                     if (e != null || snapshot == null) return@addSnapshotListener
                     viewModelScope.launch {
-                        for (doc in snapshot.documents) {
-                            val id = doc.getLong("id") ?: continue
-                            val title = doc.getString("title") ?: ""
-                            val gameName = doc.getString("gameName") ?: ""
-                            val categoryId = doc.getLong("categoryId") ?: 1L
-                            val entryFee = doc.getDouble("entryFee") ?: 0.0
-                            val prizePool = doc.getDouble("prizePool") ?: 0.0
-                            val perKill = doc.getDouble("perKill") ?: 5.0
-                            val matchType = doc.getString("matchType") ?: "Squad"
-                            val version = doc.getString("version") ?: "TPP"
-                            val mapName = doc.getString("mapName") ?: "Bermuda"
-                            val maxSlots = doc.getLong("maxSlots")?.toInt() ?: 48
-                            val bannerImageUrl = doc.getString("bannerImageUrl") ?: ""
-                            val matchTime = doc.getString("matchTime") ?: ""
-                            val rules = doc.getString("rules") ?: ""
-                            val status = doc.getString("status") ?: "Upcoming"
-                            val commissionPercent = doc.getDouble("commissionPercent") ?: 20.0
+                        try {
+                            for (doc in snapshot.documents) {
+                                val id = doc.getLongSafe("id") ?: continue
+                                val title = doc.getString("title") ?: ""
+                                val gameName = doc.getString("gameName") ?: ""
+                                val categoryId = doc.getLongSafe("categoryId") ?: 1L
+                                val entryFee = doc.getDoubleSafe("entryFee", 0.0)
+                                val prizePool = doc.getDoubleSafe("prizePool", 0.0)
+                                val perKill = doc.getDoubleSafe("perKill", 5.0)
+                                val matchType = doc.getString("matchType") ?: "Squad"
+                                val version = doc.getString("version") ?: "TPP"
+                                val mapName = doc.getString("mapName") ?: "Bermuda"
+                                val maxSlots = doc.getLongSafe("maxSlots")?.toInt() ?: 48
+                                val bannerImageUrl = doc.getString("bannerImageUrl") ?: ""
+                                val matchTime = doc.getString("matchTime") ?: ""
+                                val rules = doc.getString("rules") ?: ""
+                                val status = doc.getString("status") ?: "Upcoming"
+                                val commissionPercent = doc.getDoubleSafe("commissionPercent", 20.0)
 
-                            val existing = tournamentDao.getTournamentById(id)
-                            if (existing == null) {
-                                tournamentDao.insertTournament(
-                                    TournamentEntity(
-                                        id = id,
-                                        title = title,
-                                        gameName = gameName,
-                                        categoryId = categoryId,
-                                        entryFee = entryFee,
-                                        prizePool = prizePool,
-                                        perKill = perKill,
-                                        matchType = matchType,
-                                        version = version,
-                                        mapName = mapName,
-                                        maxSlots = maxSlots,
-                                        bannerImageUrl = bannerImageUrl,
-                                        matchTime = matchTime,
-                                        rules = rules,
-                                        status = status,
-                                        commissionPercent = commissionPercent
+                                val existing = tournamentDao.getTournamentById(id)
+                                if (existing == null) {
+                                    tournamentDao.insertTournament(
+                                        TournamentEntity(
+                                            id = id,
+                                            title = title,
+                                            gameName = gameName,
+                                            categoryId = categoryId,
+                                            entryFee = entryFee,
+                                            prizePool = prizePool,
+                                            perKill = perKill,
+                                            matchType = matchType,
+                                            version = version,
+                                            mapName = mapName,
+                                            maxSlots = maxSlots,
+                                            bannerImageUrl = bannerImageUrl,
+                                            matchTime = matchTime,
+                                            rules = rules,
+                                            status = status,
+                                            commissionPercent = commissionPercent
+                                        )
                                     )
-                                )
+                                }
                             }
+                        } catch (ex: Exception) {
+                            // Safely ignore individual sync failures
                         }
                     }
                 }
 
                 // Listen to Firestore users
-                firestore.collection("users").addSnapshotListener { snapshot, e ->
+                fs?.collection("users")?.addSnapshotListener { snapshot, e ->
                     if (e != null || snapshot == null) return@addSnapshotListener
                     viewModelScope.launch {
-                        for (doc in snapshot.documents) {
-                            val id = doc.getLong("id") ?: continue
-                            val username = doc.getString("username") ?: ""
-                            val email = doc.getString("email") ?: ""
-                            val password = doc.getString("password") ?: ""
-                            val walletBalance = doc.getDouble("walletBalance") ?: 0.0
-                            val upiId = doc.getString("upiId")
-                            val isBlocked = doc.getBoolean("isBlocked") ?: false
-                            val isAdmin = doc.getBoolean("isAdmin") ?: false
-                            val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                        try {
+                            for (doc in snapshot.documents) {
+                                val id = doc.getLongSafe("id") ?: 0L
+                                val username = doc.getString("username") ?: ""
+                                val email = doc.getString("email") ?: doc.id
+                                if (email.isBlank() && username.isBlank()) continue
+                                val password = doc.getString("password") ?: ""
+                                val walletBalance = doc.getDoubleSafe("walletBalance", 0.0)
+                                val upiId = doc.getString("upiId")
+                                val isBlocked = doc.getBoolean("isBlocked") ?: false
+                                val isAdmin = doc.getBoolean("isAdmin") ?: false
+                                val createdAt = doc.getLongSafe("createdAt") ?: System.currentTimeMillis()
 
-                            val existing = userDao.getUserById(id)
-                            if (existing == null) {
-                                userDao.insertUser(
-                                    UserEntity(
-                                        id = id,
-                                        username = username,
-                                        email = email,
-                                        password = password,
-                                        walletBalance = walletBalance,
-                                        upiId = upiId,
-                                        isBlocked = isBlocked,
-                                        isAdmin = isAdmin,
-                                        createdAt = createdAt
-                                    )
-                                )
-                            } else {
-                                if (existing.walletBalance != walletBalance || existing.isBlocked != isBlocked || existing.upiId != upiId || existing.username != username) {
-                                    userDao.updateUser(
-                                        existing.copy(
+                                val existingByEmail = if (email.isNotBlank()) userDao.getUserByUsernameOrEmail(email) else null
+                                val existingByName = existingByEmail ?: if (username.isNotBlank()) userDao.getUserByUsername(username) else null
+                                val existing = existingByName
+                                if (existing == null) {
+                                    val idOccupied = if (id > 0L) userDao.getUserById(id) != null else true
+                                    userDao.insertUser(
+                                        UserEntity(
+                                            id = if (idOccupied) 0L else id,
                                             username = username,
+                                            email = email,
+                                            password = password,
                                             walletBalance = walletBalance,
+                                            upiId = upiId,
                                             isBlocked = isBlocked,
-                                            upiId = upiId
+                                            isAdmin = isAdmin,
+                                            createdAt = createdAt
                                         )
                                     )
+                                } else {
+                                    if (existing.walletBalance != walletBalance || existing.isBlocked != isBlocked || existing.upiId != upiId || existing.username != username) {
+                                        userDao.updateUser(
+                                            existing.copy(
+                                                username = username.ifBlank { existing.username },
+                                                walletBalance = walletBalance,
+                                                isBlocked = isBlocked,
+                                                upiId = upiId
+                                            )
+                                        )
+                                    }
                                 }
                             }
+                        } catch (ex: Exception) {
+                            // Safely ignore individual sync failures
                         }
                     }
                 }
 
                 // Listen to Firestore deposits
-                firestore.collection("deposits").addSnapshotListener { snapshot, e ->
+                fs?.collection("deposits")?.addSnapshotListener { snapshot, e ->
                     if (e != null || snapshot == null) return@addSnapshotListener
                     viewModelScope.launch {
-                        for (doc in snapshot.documents) {
-                            val id = doc.getLong("id") ?: continue
-                            val userId = doc.getLong("userId") ?: continue
-                            val amount = doc.getDouble("amount") ?: 0.0
-                            val transactionId = doc.getString("transactionId") ?: ""
-                            val status = doc.getString("status") ?: "Pending"
-                            val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                        try {
+                            for (doc in snapshot.documents) {
+                                val id = doc.getLongSafe("id") ?: continue
+                                val userId = doc.getLongSafe("userId") ?: continue
+                                val amount = doc.getDoubleSafe("amount", 0.0)
+                                val transactionId = doc.getString("transactionId") ?: ""
+                                val status = doc.getString("status") ?: "Pending"
+                                val createdAt = doc.getLongSafe("createdAt") ?: System.currentTimeMillis()
 
-                            val existing = depositDao.getDepositById(id)
-                            if (existing == null) {
-                                depositDao.insertDeposit(
-                                    DepositEntity(
-                                        id = id,
-                                        userId = userId,
-                                        amount = amount,
-                                        transactionId = transactionId,
-                                        status = status,
-                                        createdAt = createdAt
+                                val existing = depositDao.getDepositById(id)
+                                if (existing == null) {
+                                    depositDao.insertDeposit(
+                                        DepositEntity(
+                                            id = id,
+                                            userId = userId,
+                                            amount = amount,
+                                            transactionId = transactionId,
+                                            status = status,
+                                            createdAt = createdAt
+                                        )
                                     )
-                                )
+                                }
                             }
+                        } catch (ex: Exception) {
+                            // Safely ignore individual sync failures
                         }
                     }
                 }
 
                 // Listen to Firestore withdrawals
-                firestore.collection("withdrawals").addSnapshotListener { snapshot, e ->
+                fs?.collection("withdrawals")?.addSnapshotListener { snapshot, e ->
                     if (e != null || snapshot == null) return@addSnapshotListener
                     viewModelScope.launch {
-                        for (doc in snapshot.documents) {
-                            val id = doc.getLong("id") ?: continue
-                            val userId = doc.getLong("userId") ?: continue
-                            val amount = doc.getDouble("amount") ?: 0.0
-                            val status = doc.getString("status") ?: "Pending"
-                            val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                        try {
+                            for (doc in snapshot.documents) {
+                                val id = doc.getLongSafe("id") ?: continue
+                                val userId = doc.getLongSafe("userId") ?: continue
+                                val amount = doc.getDoubleSafe("amount", 0.0)
+                                val status = doc.getString("status") ?: "Pending"
+                                val createdAt = doc.getLongSafe("createdAt") ?: System.currentTimeMillis()
 
-                            val existing = withdrawalDao.getWithdrawalById(id)
-                            if (existing == null) {
-                                withdrawalDao.insertWithdrawal(
-                                    WithdrawalEntity(
-                                        id = id,
-                                        userId = userId,
-                                        amount = amount,
-                                        status = status,
-                                        createdAt = createdAt
+                                val existing = withdrawalDao.getWithdrawalById(id)
+                                if (existing == null) {
+                                    withdrawalDao.insertWithdrawal(
+                                        WithdrawalEntity(
+                                            id = id,
+                                            userId = userId,
+                                            amount = amount,
+                                            status = status,
+                                            createdAt = createdAt
+                                        )
                                     )
-                                )
+                                }
                             }
+                        } catch (ex: Exception) {
+                            // Safely ignore individual sync failures
                         }
                     }
                 }
 
                 // Listen to Firestore participants
-                firestore.collection("participants").addSnapshotListener { snapshot, e ->
+                fs?.collection("participants")?.addSnapshotListener { snapshot, e ->
                     if (e != null || snapshot == null) return@addSnapshotListener
                     viewModelScope.launch {
-                        for (doc in snapshot.documents) {
-                            val userId = doc.getLong("userId") ?: continue
-                            val tournamentId = doc.getLong("tournamentId") ?: continue
-                            val inGameName = doc.getString("inGameName") ?: ""
-                            val result = doc.getString("result") ?: "Participated"
+                        try {
+                            for (doc in snapshot.documents) {
+                                val userId = doc.getLongSafe("userId") ?: continue
+                                val tournamentId = doc.getLongSafe("tournamentId") ?: continue
+                                val inGameName = doc.getString("inGameName") ?: ""
+                                val result = doc.getString("result") ?: "Participated"
 
-                            val existing = participantDao.getParticipant(userId, tournamentId)
-                            if (existing == null) {
-                                participantDao.insertParticipant(
-                                    ParticipantEntity(
-                                        userId = userId,
-                                        tournamentId = tournamentId,
-                                        inGameName = inGameName,
-                                        result = result
+                                val existing = participantDao.getParticipant(userId, tournamentId)
+                                if (existing == null) {
+                                    participantDao.insertParticipant(
+                                        ParticipantEntity(
+                                            userId = userId,
+                                            tournamentId = tournamentId,
+                                            inGameName = inGameName,
+                                            result = result
+                                        )
                                     )
-                                )
+                                }
                             }
+                        } catch (ex: Exception) {
+                            // Safely ignore individual sync failures
                         }
                     }
                 }
@@ -254,35 +334,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 // Ignore initialization errors safely
             }
-
-            _currentUser.collect { user ->
-                if (user != null) {
-                    userDao.observeUser(user.id).collect { updated ->
-                        if (updated != null) {
-                            _currentUser.value = updated
-                        }
-                    }
-                }
-            }
         }
     }
 
     private fun syncUserToFirestore(user: UserEntity) {
-        val map = hashMapOf(
-            "id" to user.id,
-            "username" to user.username,
-            "email" to user.email,
-            "password" to user.password,
-            "walletBalance" to user.walletBalance,
-            "upiId" to (user.upiId ?: ""),
-            "isBlocked" to user.isBlocked,
-            "isAdmin" to user.isAdmin,
-            "createdAt" to user.createdAt
-        )
-        firestore.collection("users").document(user.email).set(map)
+        try {
+            val map = hashMapOf(
+                "id" to user.id,
+                "username" to user.username,
+                "email" to user.email,
+                "password" to user.password,
+                "walletBalance" to user.walletBalance,
+                "upiId" to (user.upiId ?: ""),
+                "isBlocked" to user.isBlocked,
+                "isAdmin" to user.isAdmin,
+                "createdAt" to user.createdAt
+            )
+            firestore?.collection("users")?.document(user.email)?.set(map)
+        } catch (e: Exception) {
+            // Safely ignore sync failures
+        }
     }
-
-    private val firebaseAuth = com.google.firebase.auth.FirebaseAuth.getInstance()
 
     fun loginUser(username: String, pass: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
@@ -300,12 +372,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (username.contains("@")) {
                 try {
-                    firebaseAuth.signInWithEmailAndPassword(username, pass)
-                } catch (e: Exception) {
-                    try {
-                        firebaseAuth.createUserWithEmailAndPassword(username, pass)
-                    } catch (ex: Exception) {}
-                }
+                    firebaseAuth?.signInWithEmailAndPassword(username, pass)
+                        ?.addOnFailureListener {
+                            try {
+                                firebaseAuth?.createUserWithEmailAndPassword(username, pass)
+                            } catch (_: Exception) {}
+                        }
+                } catch (_: Exception) {}
             }
             var user = userDao.getUserByUsernameOrEmail(username)
             if (user == null) {
@@ -346,12 +419,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun loginOrRegisterGoogleUser(username: String, email: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             try {
-                firebaseAuth.signInWithEmailAndPassword(email, "google_auth_secure")
-            } catch (e: Exception) {
-                try {
-                    firebaseAuth.createUserWithEmailAndPassword(email, "google_auth_secure")
-                } catch (ex: Exception) {}
-            }
+                firebaseAuth?.signInWithEmailAndPassword(email, "google_auth_secure")
+                    ?.addOnFailureListener {
+                        try {
+                            firebaseAuth?.createUserWithEmailAndPassword(email, "google_auth_secure")
+                        } catch (_: Exception) {}
+                    }
+            } catch (_: Exception) {}
             var user = userDao.getUserByUsernameOrEmail(email) ?: userDao.getUserByUsernameOrEmail(username)
             if (user == null) {
                 val newUser = UserEntity(
@@ -402,12 +476,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             try {
-                firebaseAuth.createUserWithEmailAndPassword(email, pass)
-            } catch (e: Exception) {
-                try {
-                    firebaseAuth.signInWithEmailAndPassword(email, pass)
-                } catch (ex: Exception) {}
-            }
+                firebaseAuth?.createUserWithEmailAndPassword(email, pass)
+                    ?.addOnFailureListener {
+                        try {
+                            firebaseAuth?.signInWithEmailAndPassword(email, pass)
+                        } catch (_: Exception) {}
+                    }
+            } catch (_: Exception) {}
 
             val newUser = UserEntity(
                 username = username,
@@ -483,7 +558,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "inGameName" to p.inGameName,
                     "result" to p.result
                 )
-                firestore.collection("participants").add(map)
+                try {
+                    firestore?.collection("participants")?.add(map)
+                } catch (_: Exception) {}
                 userDao.getUserById(user.id)?.let { syncUserToFirestore(it) }
             }
             _message.value = res.exceptionOrNull()?.message ?: res.getOrNull()
@@ -503,7 +580,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "status" to deposit.status,
                     "createdAt" to deposit.createdAt
                 )
-                firestore.collection("deposits").add(map)
+                try {
+                    firestore?.collection("deposits")?.add(map)
+                } catch (_: Exception) {}
             }
             _message.value = res.exceptionOrNull()?.message ?: res.getOrNull()
         }
@@ -521,7 +600,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     "status" to w.status,
                     "createdAt" to w.createdAt
                 )
-                firestore.collection("withdrawals").add(map)
+                try {
+                    firestore?.collection("withdrawals")?.add(map)
+                } catch (_: Exception) {}
                 userDao.getUserById(user.id)?.let { syncUserToFirestore(it) }
             }
             _message.value = res.exceptionOrNull()?.message ?: res.getOrNull()
@@ -651,7 +732,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "commissionPercent" to tournament.commissionPercent,
                 "createdAt" to tournament.createdAt
             )
-            firestore.collection("tournaments").document(id.toString()).set(map)
+            try {
+                firestore?.collection("tournaments")?.document(id.toString())?.set(map)
+            } catch (_: Exception) {}
 
             // Send notification that tournament registration is open
             val notif = NotificationEntity(
@@ -667,7 +750,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "targetUser" to notif.targetUser,
                 "createdAt" to notif.createdAt
             )
-            firestore.collection("notifications").add(notifMap)
+            try {
+                firestore?.collection("notifications")?.add(notifMap)
+            } catch (_: Exception) {}
 
             _message.value = "Tournament created & notifications sent successfully!"
         }

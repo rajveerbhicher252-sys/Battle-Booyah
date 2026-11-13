@@ -64,7 +64,7 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE isAdmin = 0")
     fun getAllUsers(): Flow<List<UserEntity>>
 
-    @Insert(onConflict = OnConflictStrategy.ABORT)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUser(user: UserEntity): Long
 
     @Update
@@ -146,13 +146,13 @@ interface TransactionDao {
     @Query("SELECT * FROM transactions WHERE userId = :userId ORDER BY createdAt DESC")
     fun getTransactionsForUser(userId: Long): Flow<List<TransactionEntity>>
 
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTransaction(transaction: TransactionEntity)
 }
 
 @Dao
 interface DepositDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDeposit(deposit: DepositEntity)
 
     @Query("""
@@ -172,7 +172,7 @@ interface DepositDao {
 
 @Dao
 interface WithdrawalDao {
-    @Insert
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWithdrawal(withdrawal: WithdrawalEntity)
 
     @Query("""
