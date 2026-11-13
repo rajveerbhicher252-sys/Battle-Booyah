@@ -108,7 +108,10 @@ data class AdminSettingsEntity(
     val privacyPolicyText: String = "We respect your privacy and protect your personal information in accordance with industry standards.",
     val termsText: String = "By participating in tournaments, you agree to fair play rules and terms of service. No hacking/emulators allowed.",
     val fairPlayText: String = "Fair play is strictly enforced. Any usage of scripts, hacks, or unauthorized emulators will result in permanent account ban.",
-    val refundPolicyText: String = "Entry fees are non-refundable once the tournament starts or fills up. Prizes are credited directly to your wallet."
+    val refundPolicyText: String = "Entry fees are non-refundable once the tournament starts or fills up. Prizes are credited directly to your wallet.",
+    val telegramUrl: String = "https://t.me/battlebooyah",
+    val whatsappUrl: String = "https://whatsapp.com",
+    val instagramUrl: String = "https://instagram.com"
 )
 
 @Entity(tableName = "notifications")

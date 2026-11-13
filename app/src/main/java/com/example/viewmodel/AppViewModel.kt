@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
+import com.google.firebase.firestore.FirebaseFirestore
+import com.example.R
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -45,9 +47,187 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     val allDeposits = depositDao.getAllDepositsWithUsers()
     val allWithdrawals = withdrawalDao.getAllWithdrawalsWithUsers()
 
+    private val firestore = FirebaseFirestore.getInstance()
+
     init {
         viewModelScope.launch {
             try {
+                // Listen to Firestore tournaments for cross-device real-time sync
+                firestore.collection("tournaments").addSnapshotListener { snapshot, e ->
+                    if (e != null || snapshot == null) return@addSnapshotListener
+                    viewModelScope.launch {
+                        for (doc in snapshot.documents) {
+                            val id = doc.getLong("id") ?: continue
+                            val title = doc.getString("title") ?: ""
+                            val gameName = doc.getString("gameName") ?: ""
+                            val categoryId = doc.getLong("categoryId") ?: 1L
+                            val entryFee = doc.getDouble("entryFee") ?: 0.0
+                            val prizePool = doc.getDouble("prizePool") ?: 0.0
+                            val perKill = doc.getDouble("perKill") ?: 5.0
+                            val matchType = doc.getString("matchType") ?: "Squad"
+                            val version = doc.getString("version") ?: "TPP"
+                            val mapName = doc.getString("mapName") ?: "Bermuda"
+                            val maxSlots = doc.getLong("maxSlots")?.toInt() ?: 48
+                            val bannerImageUrl = doc.getString("bannerImageUrl") ?: ""
+                            val matchTime = doc.getString("matchTime") ?: ""
+                            val rules = doc.getString("rules") ?: ""
+                            val status = doc.getString("status") ?: "Upcoming"
+                            val commissionPercent = doc.getDouble("commissionPercent") ?: 20.0
+
+                            val existing = tournamentDao.getTournamentById(id)
+                            if (existing == null) {
+                                tournamentDao.insertTournament(
+                                    TournamentEntity(
+                                        id = id,
+                                        title = title,
+                                        gameName = gameName,
+                                        categoryId = categoryId,
+                                        entryFee = entryFee,
+                                        prizePool = prizePool,
+                                        perKill = perKill,
+                                        matchType = matchType,
+                                        version = version,
+                                        mapName = mapName,
+                                        maxSlots = maxSlots,
+                                        bannerImageUrl = bannerImageUrl,
+                                        matchTime = matchTime,
+                                        rules = rules,
+                                        status = status,
+                                        commissionPercent = commissionPercent
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Listen to Firestore users
+                firestore.collection("users").addSnapshotListener { snapshot, e ->
+                    if (e != null || snapshot == null) return@addSnapshotListener
+                    viewModelScope.launch {
+                        for (doc in snapshot.documents) {
+                            val id = doc.getLong("id") ?: continue
+                            val username = doc.getString("username") ?: ""
+                            val email = doc.getString("email") ?: ""
+                            val password = doc.getString("password") ?: ""
+                            val walletBalance = doc.getDouble("walletBalance") ?: 0.0
+                            val upiId = doc.getString("upiId")
+                            val isBlocked = doc.getBoolean("isBlocked") ?: false
+                            val isAdmin = doc.getBoolean("isAdmin") ?: false
+                            val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+
+                            val existing = userDao.getUserById(id)
+                            if (existing == null) {
+                                userDao.insertUser(
+                                    UserEntity(
+                                        id = id,
+                                        username = username,
+                                        email = email,
+                                        password = password,
+                                        walletBalance = walletBalance,
+                                        upiId = upiId,
+                                        isBlocked = isBlocked,
+                                        isAdmin = isAdmin,
+                                        createdAt = createdAt
+                                    )
+                                )
+                            } else {
+                                if (existing.walletBalance != walletBalance || existing.isBlocked != isBlocked || existing.upiId != upiId || existing.username != username) {
+                                    userDao.updateUser(
+                                        existing.copy(
+                                            username = username,
+                                            walletBalance = walletBalance,
+                                            isBlocked = isBlocked,
+                                            upiId = upiId
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Listen to Firestore deposits
+                firestore.collection("deposits").addSnapshotListener { snapshot, e ->
+                    if (e != null || snapshot == null) return@addSnapshotListener
+                    viewModelScope.launch {
+                        for (doc in snapshot.documents) {
+                            val id = doc.getLong("id") ?: continue
+                            val userId = doc.getLong("userId") ?: continue
+                            val amount = doc.getDouble("amount") ?: 0.0
+                            val transactionId = doc.getString("transactionId") ?: ""
+                            val status = doc.getString("status") ?: "Pending"
+                            val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+
+                            val existing = depositDao.getDepositById(id)
+                            if (existing == null) {
+                                depositDao.insertDeposit(
+                                    DepositEntity(
+                                        id = id,
+                                        userId = userId,
+                                        amount = amount,
+                                        transactionId = transactionId,
+                                        status = status,
+                                        createdAt = createdAt
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Listen to Firestore withdrawals
+                firestore.collection("withdrawals").addSnapshotListener { snapshot, e ->
+                    if (e != null || snapshot == null) return@addSnapshotListener
+                    viewModelScope.launch {
+                        for (doc in snapshot.documents) {
+                            val id = doc.getLong("id") ?: continue
+                            val userId = doc.getLong("userId") ?: continue
+                            val amount = doc.getDouble("amount") ?: 0.0
+                            val status = doc.getString("status") ?: "Pending"
+                            val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+
+                            val existing = withdrawalDao.getWithdrawalById(id)
+                            if (existing == null) {
+                                withdrawalDao.insertWithdrawal(
+                                    WithdrawalEntity(
+                                        id = id,
+                                        userId = userId,
+                                        amount = amount,
+                                        status = status,
+                                        createdAt = createdAt
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Listen to Firestore participants
+                firestore.collection("participants").addSnapshotListener { snapshot, e ->
+                    if (e != null || snapshot == null) return@addSnapshotListener
+                    viewModelScope.launch {
+                        for (doc in snapshot.documents) {
+                            val userId = doc.getLong("userId") ?: continue
+                            val tournamentId = doc.getLong("tournamentId") ?: continue
+                            val inGameName = doc.getString("inGameName") ?: ""
+                            val result = doc.getString("result") ?: "Participated"
+
+                            val existing = participantDao.getParticipant(userId, tournamentId)
+                            if (existing == null) {
+                                participantDao.insertParticipant(
+                                    ParticipantEntity(
+                                        userId = userId,
+                                        tournamentId = tournamentId,
+                                        inGameName = inGameName,
+                                        result = result
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+
                 val settings = userDao.getAdminSettings()
                 if (settings == null) {
                     userDao.insertAdminSettings(AdminSettingsEntity(id = 1))
@@ -87,6 +267,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun syncUserToFirestore(user: UserEntity) {
+        val map = hashMapOf(
+            "id" to user.id,
+            "username" to user.username,
+            "email" to user.email,
+            "password" to user.password,
+            "walletBalance" to user.walletBalance,
+            "upiId" to (user.upiId ?: ""),
+            "isBlocked" to user.isBlocked,
+            "isAdmin" to user.isAdmin,
+            "createdAt" to user.createdAt
+        )
+        firestore.collection("users").document(user.email).set(map)
+    }
+
+    private val firebaseAuth = com.google.firebase.auth.FirebaseAuth.getInstance()
+
     fun loginUser(username: String, pass: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             if ((username.lowercase() == "rajveerbhicher252@gmail.com" || username.lowercase() == "admin") && pass == "123456") {
@@ -96,10 +293,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 onResult(true, "Admin login successful!")
                 return@launch
             }
-            val user = userDao.getUserByUsernameOrEmail(username)
-            if (user == null || user.password != pass) {
-                _message.value = "Invalid username or password"
-                onResult(false, "Invalid username or password")
+            if (username.isBlank() || pass.isBlank()) {
+                _message.value = "Username and password are required!"
+                onResult(false, "Username and password are required!")
+                return@launch
+            }
+            if (username.contains("@")) {
+                try {
+                    firebaseAuth.signInWithEmailAndPassword(username, pass)
+                } catch (e: Exception) {
+                    try {
+                        firebaseAuth.createUserWithEmailAndPassword(username, pass)
+                    } catch (ex: Exception) {}
+                }
+            }
+            var user = userDao.getUserByUsernameOrEmail(username)
+            if (user == null) {
+                // Auto-create user account on login if not registered yet
+                val emailOrUsername = if (username.contains("@")) username else "$username@battlebooyah.com"
+                val newUser = UserEntity(
+                    username = username,
+                    email = emailOrUsername,
+                    password = pass,
+                    walletBalance = 0.0
+                )
+                val id = userDao.insertUser(newUser)
+                user = userDao.getUserById(id)
+            } else if (user.password != pass) {
+                _message.value = "Invalid password"
+                onResult(false, "Invalid password")
+                return@launch
+            }
+            if (user == null) {
+                _message.value = "Login failed"
+                onResult(false, "Login failed")
                 return@launch
             }
             if (user.isBlocked) {
@@ -110,12 +337,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _currentUser.value = user
             _isAdminLoggedIn.value = false
             _currentScreen.value = "user_main"
+            syncUserToFirestore(user)
+            _message.value = "Login successful!"
             onResult(true, "Login successful!")
         }
     }
 
     fun loginOrRegisterGoogleUser(username: String, email: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
+            try {
+                firebaseAuth.signInWithEmailAndPassword(email, "google_auth_secure")
+            } catch (e: Exception) {
+                try {
+                    firebaseAuth.createUserWithEmailAndPassword(email, "google_auth_secure")
+                } catch (ex: Exception) {}
+            }
             var user = userDao.getUserByUsernameOrEmail(email) ?: userDao.getUserByUsernameOrEmail(username)
             if (user == null) {
                 val newUser = UserEntity(
@@ -136,6 +372,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _currentUser.value = user
                 _isAdminLoggedIn.value = false
                 _currentScreen.value = "user_main"
+                syncUserToFirestore(user)
                 _message.value = "Google Sign-In successful!"
                 onResult(true, "Google Sign-In successful!")
             } else {
@@ -147,6 +384,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signupUser(username: String, email: String, pass: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
+            if (username.lowercase() == "rajveerbhicher252@gmail.com" || username.lowercase() == "admin" || email.lowercase() == "rajveerbhicher252@gmail.com") {
+                _message.value = "This email or username is reserved for Admin!"
+                onResult(false, "This email or username is reserved for Admin!")
+                return@launch
+            }
             val existing = userDao.getUserByUsername(username)
             if (existing != null) {
                 _message.value = "Username already exists!"
@@ -158,6 +400,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 onResult(false, "All fields are required!")
                 return@launch
             }
+
+            try {
+                firebaseAuth.createUserWithEmailAndPassword(email, pass)
+            } catch (e: Exception) {
+                try {
+                    firebaseAuth.signInWithEmailAndPassword(email, pass)
+                } catch (ex: Exception) {}
+            }
+
             val newUser = UserEntity(
                 username = username,
                 email = email,
@@ -170,6 +421,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _currentUser.value = created
                 _isAdminLoggedIn.value = false
                 _currentScreen.value = "user_main"
+                syncUserToFirestore(created)
                 _message.value = "Account created successfully!"
                 onResult(true, "Account created successfully!")
             } else {
@@ -223,6 +475,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
             val res = repository.joinTournament(user.id, tournamentId, inGameName)
+            if (res.isSuccess) {
+                val p = ParticipantEntity(userId = user.id, tournamentId = tournamentId, inGameName = inGameName, result = "Participated")
+                val map = hashMapOf(
+                    "userId" to p.userId,
+                    "tournamentId" to p.tournamentId,
+                    "inGameName" to p.inGameName,
+                    "result" to p.result
+                )
+                firestore.collection("participants").add(map)
+                userDao.getUserById(user.id)?.let { syncUserToFirestore(it) }
+            }
             _message.value = res.exceptionOrNull()?.message ?: res.getOrNull()
         }
     }
@@ -231,6 +494,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
             val res = repository.createDepositRequest(user.id, amount, txId)
+            if (res.isSuccess) {
+                val deposit = DepositEntity(userId = user.id, amount = amount, transactionId = txId, status = "Pending")
+                val map = hashMapOf(
+                    "userId" to deposit.userId,
+                    "amount" to deposit.amount,
+                    "transactionId" to deposit.transactionId,
+                    "status" to deposit.status,
+                    "createdAt" to deposit.createdAt
+                )
+                firestore.collection("deposits").add(map)
+            }
             _message.value = res.exceptionOrNull()?.message ?: res.getOrNull()
         }
     }
@@ -239,6 +513,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val user = _currentUser.value ?: return
         viewModelScope.launch {
             val res = repository.createWithdrawalRequest(user.id, amount)
+            if (res.isSuccess) {
+                val w = WithdrawalEntity(userId = user.id, amount = amount, status = "Pending")
+                val map = hashMapOf(
+                    "userId" to w.userId,
+                    "amount" to w.amount,
+                    "status" to w.status,
+                    "createdAt" to w.createdAt
+                )
+                firestore.collection("withdrawals").add(map)
+                userDao.getUserById(user.id)?.let { syncUserToFirestore(it) }
+            }
             _message.value = res.exceptionOrNull()?.message ?: res.getOrNull()
         }
     }
@@ -249,6 +534,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val updated = user.copy(username = newUsername, email = newEmail, upiId = newUpi)
             userDao.updateUser(updated)
             _currentUser.value = updated
+            syncUserToFirestore(updated)
             _message.value = "Profile updated successfully!"
         }
     }
@@ -326,26 +612,64 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         rules: String = ""
     ) {
         viewModelScope.launch {
-            tournamentDao.insertTournament(
-                TournamentEntity(
-                    title = title,
-                    gameName = gameName,
-                    categoryId = categoryId,
-                    entryFee = entryFee,
-                    prizePool = prizePool,
-                    perKill = perKill,
-                    matchType = matchType,
-                    version = version,
-                    mapName = mapName,
-                    maxSlots = maxSlots,
-                    bannerImageUrl = bannerImageUrl,
-                    matchTime = matchTime,
-                    rules = if (rules.isNotBlank()) rules else TournamentEntity(title="", gameName="", entryFee=0.0, prizePool=0.0, matchTime="").rules,
-                    commissionPercent = commission,
-                    status = "Upcoming"
-                )
+            val tournament = TournamentEntity(
+                title = title,
+                gameName = gameName,
+                categoryId = categoryId,
+                entryFee = entryFee,
+                prizePool = prizePool,
+                perKill = perKill,
+                matchType = matchType,
+                version = version,
+                mapName = mapName,
+                maxSlots = maxSlots,
+                bannerImageUrl = bannerImageUrl,
+                matchTime = matchTime,
+                rules = if (rules.isNotBlank()) rules else TournamentEntity(title="", gameName="", entryFee=0.0, prizePool=0.0, matchTime="").rules,
+                commissionPercent = commission,
+                status = "Upcoming"
             )
-            _message.value = "Tournament created successfully!"
+            val id = tournamentDao.insertTournament(tournament)
+            
+            // Sync tournament to Firestore
+            val map = hashMapOf(
+                "id" to id,
+                "title" to tournament.title,
+                "gameName" to tournament.gameName,
+                "categoryId" to tournament.categoryId,
+                "entryFee" to tournament.entryFee,
+                "prizePool" to tournament.prizePool,
+                "perKill" to tournament.perKill,
+                "matchType" to tournament.matchType,
+                "version" to tournament.version,
+                "mapName" to tournament.mapName,
+                "maxSlots" to tournament.maxSlots,
+                "bannerImageUrl" to tournament.bannerImageUrl,
+                "matchTime" to tournament.matchTime,
+                "rules" to tournament.rules,
+                "status" to tournament.status,
+                "commissionPercent" to tournament.commissionPercent,
+                "createdAt" to tournament.createdAt
+            )
+            firestore.collection("tournaments").document(id.toString()).set(map)
+
+            // Send notification that tournament registration is open
+            val notif = NotificationEntity(
+                title = "🎮 Tournament Registration Open!",
+                message = "New tournament '$title' is live for registration! Entry Fee: ₹$entryFee, Prize Pool: ₹$prizePool. Join now!",
+                target = "All Users"
+            )
+            repository.notificationDao.insertNotification(notif)
+            val notifMap = hashMapOf(
+                "title" to notif.title,
+                "message" to notif.message,
+                "target" to notif.target,
+                "targetUser" to notif.targetUser,
+                "createdAt" to notif.createdAt
+            )
+            firestore.collection("notifications").add(notifMap)
+
+            _message.value = "Tournament created & notifications sent successfully!"
         }
     }
 
@@ -428,7 +752,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         privacyPolicyText: String = "",
         termsText: String = "",
         fairPlayText: String = "",
-        refundPolicyText: String = ""
+        refundPolicyText: String = "",
+        telegramUrl: String = "",
+        whatsappUrl: String = "",
+        instagramUrl: String = ""
     ) {
         viewModelScope.launch {
             val existing = userDao.getAdminSettings()
@@ -444,7 +771,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     privacyPolicyText = if (privacyPolicyText.isNotBlank()) privacyPolicyText else (existing?.privacyPolicyText ?: ""),
                     termsText = if (termsText.isNotBlank()) termsText else (existing?.termsText ?: ""),
                     fairPlayText = if (fairPlayText.isNotBlank()) fairPlayText else (existing?.fairPlayText ?: ""),
-                    refundPolicyText = if (refundPolicyText.isNotBlank()) refundPolicyText else (existing?.refundPolicyText ?: "")
+                    refundPolicyText = if (refundPolicyText.isNotBlank()) refundPolicyText else (existing?.refundPolicyText ?: ""),
+                    telegramUrl = if (telegramUrl.isNotBlank()) telegramUrl else (existing?.telegramUrl ?: "https://t.me/battlebooyah"),
+                    whatsappUrl = if (whatsappUrl.isNotBlank()) whatsappUrl else (existing?.whatsappUrl ?: "https://whatsapp.com"),
+                    instagramUrl = if (instagramUrl.isNotBlank()) instagramUrl else (existing?.instagramUrl ?: "https://instagram.com")
                 )
             )
             _message.value = "Admin settings and policies saved successfully!"

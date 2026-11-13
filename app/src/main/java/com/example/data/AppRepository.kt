@@ -93,6 +93,15 @@ class AppRepository(private val db: AppDatabase) {
             )
         )
 
+        notificationDao.insertNotification(
+            NotificationEntity(
+                title = "🎉 Deposit Approved & Credited!",
+                message = "Your deposit of ₹${deposit.amount} has been approved and added to your wallet.",
+                target = "Specific User",
+                targetUser = user.username
+            )
+        )
+
         return Result.success("Deposit approved and credited!")
     }
 
@@ -172,6 +181,15 @@ class AppRepository(private val db: AppDatabase) {
                 amount = tournament.prizePool,
                 type = "credit",
                 description = "Won tournament prize: ${tournament.title}"
+            )
+        )
+
+        notificationDao.insertNotification(
+            NotificationEntity(
+                title = "🏆 Tournament Won! Reward Credited",
+                message = "Congratulations! You won ${tournament.title} and ₹${tournament.prizePool} reward has been added to your wallet.",
+                target = "Specific User",
+                targetUser = winnerUser.username
             )
         )
 

@@ -19,7 +19,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         AdminSettingsEntity::class,
         NotificationEntity::class
     ],
-    version = 7,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

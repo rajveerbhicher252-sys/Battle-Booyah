@@ -961,6 +961,10 @@ fun AdminSettingsTab(viewModel: AppViewModel) {
     var minWithdrawal by remember(adminSettings) { mutableStateOf(adminSettings?.minWithdrawalLimit?.toString() ?: "100") }
     var newPassword by remember { mutableStateOf("") }
     
+    var telegramUrl by remember(adminSettings) { mutableStateOf(adminSettings?.telegramUrl ?: "https://t.me/battlebooyah") }
+    var whatsappUrl by remember(adminSettings) { mutableStateOf(adminSettings?.whatsappUrl ?: "https://whatsapp.com") }
+    var instagramUrl by remember(adminSettings) { mutableStateOf(adminSettings?.instagramUrl ?: "https://instagram.com") }
+
     var faqText by remember(adminSettings) { mutableStateOf(adminSettings?.faqText ?: "") }
     var aboutUsText by remember(adminSettings) { mutableStateOf(adminSettings?.aboutUsText ?: "") }
     var privacyPolicyText by remember(adminSettings) { mutableStateOf(adminSettings?.privacyPolicyText ?: "") }
@@ -983,7 +987,7 @@ fun AdminSettingsTab(viewModel: AppViewModel) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("General Settings", fontWeight = FontWeight.Bold, color = AccentGold, fontSize = 16.sp)
+                Text("General & Social Settings", fontWeight = FontWeight.Bold, color = AccentGold, fontSize = 16.sp)
                 OutlinedTextField(
                     value = upiId,
                     onValueChange = { upiId = it },
@@ -1002,6 +1006,27 @@ fun AdminSettingsTab(viewModel: AppViewModel) {
                     value = minWithdrawal,
                     onValueChange = { minWithdrawal = it },
                     label = { Text("Minimum Withdrawal Limit (₹)") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = telegramUrl,
+                    onValueChange = { telegramUrl = it },
+                    label = { Text("Telegram Group/Channel URL") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = whatsappUrl,
+                    onValueChange = { whatsappUrl = it },
+                    label = { Text("WhatsApp Group/Contact URL") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+                OutlinedTextField(
+                    value = instagramUrl,
+                    onValueChange = { instagramUrl = it },
+                    label = { Text("Instagram Page URL") },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
@@ -1073,7 +1098,8 @@ fun AdminSettingsTab(viewModel: AppViewModel) {
                         val minW = minWithdrawal.toDoubleOrNull() ?: 100.0
                         viewModel.updateAdminSettings(
                             upiId, qrUrl, minW, newPassword,
-                            faqText, aboutUsText, privacyPolicyText, termsText, fairPlayText, refundPolicyText
+                            faqText, aboutUsText, privacyPolicyText, termsText, fairPlayText, refundPolicyText,
+                            telegramUrl, whatsappUrl, instagramUrl
                         )
                         newPassword = ""
                     },
