@@ -35,12 +35,13 @@ jobs:
 
       - name: Accept Android SDK Licenses
         run: |
-          if [ -n "$ANDROID_HOME" ] && [ -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
-            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ -n "$SDK_ROOT" ] && [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
           fi
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace -Dorg.gradle.jvmargs="-Xmx3g -Dfile.encoding=UTF-8"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
