@@ -24,14 +24,31 @@ jobs:
         with:
           gradle-version: '9.3.1'
 
-      - name: Prepare debug keystore and env
+      - name: Prepare debug keystore, Firebase config, and env
         run: |
           if [ -f debug.keystore.base64 ] && [ ! -f debug.keystore ]; then
             base64 -d debug.keystore.base64 > debug.keystore
           fi
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair -noprompt \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          if [ -n "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" ] && [ ! -f app/google-services.json ]; then
+            echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > app/google-services.json
+          fi
           if [ ! -f .env ] && [ -f .env.example ]; then
             cp .env.example .env
           fi
+
+      - name: Remove duplicate mipmap webp resources
+        run: rm -f app/src/main/res/mipmap-*/ic_launcher*.webp
 
       - name: Accept Android SDK Licenses
         run: |

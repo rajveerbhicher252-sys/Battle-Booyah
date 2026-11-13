@@ -52,11 +52,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val firestore: FirebaseFirestore? by lazy {
         try {
-            if (FirebaseApp.getApps(getApplication()).isEmpty()) {
-                FirebaseApp.initializeApp(getApplication())
+            val app = getApplication<Application>()
+            if (FirebaseApp.getApps(app).isEmpty()) {
+                FirebaseApp.initializeApp(app)
             }
-            if (FirebaseApp.getApps(getApplication()).isNotEmpty()) {
-                FirebaseFirestore.getInstance()
+            if (FirebaseApp.getApps(app).isNotEmpty()) {
+                val dbId = try {
+                    app.getString(com.example.R.string.firestore_database_id)
+                } catch (_: Exception) {
+                    ""
+                }
+                if (dbId.isNotBlank()) FirebaseFirestore.getInstance(dbId)
+                else FirebaseFirestore.getInstance()
             } else null
         } catch (e: Exception) {
             null
