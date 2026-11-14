@@ -254,7 +254,7 @@ fun HomeScreen(viewModel: AppViewModel) {
                 SocialButton(text = "Instagram", color = Color(0xFFE4405F), url = adminSettings?.instagramUrl ?: "https://instagram.com", modifier = Modifier.weight(1f))
             }
         } else {
-            var subTab by remember { mutableIntStateOf(0) } // 0: Ongoing, 1: Upcoming, 2: Completed
+            var subTab by remember { mutableIntStateOf(0) } // 0: Upcoming, 1: Ongoing, 2: Completed
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -272,16 +272,16 @@ fun HomeScreen(viewModel: AppViewModel) {
                 containerColor = DarkSurface,
                 contentColor = PrimaryCyan
             ) {
-                Tab(selected = subTab == 0, onClick = { subTab = 0 }, text = { Text("Ongoing") })
-                Tab(selected = subTab == 1, onClick = { subTab = 1 }, text = { Text("Upcoming") })
+                Tab(selected = subTab == 0, onClick = { subTab = 0 }, text = { Text("Upcoming") })
+                Tab(selected = subTab == 1, onClick = { subTab = 1 }, text = { Text("Ongoing") })
                 Tab(selected = subTab == 2, onClick = { subTab = 2 }, text = { Text("Completed") })
             }
 
             Spacer(modifier = Modifier.height(16.dp))
 
             val filteredTournaments = when (subTab) {
-                0 -> categoryTournaments.filter { it.status == "Live" || it.status == "Ongoing" }
-                1 -> categoryTournaments.filter { it.status == "Upcoming" || it.status.isBlank() }
+                0 -> categoryTournaments.filter { it.status == "Upcoming" || it.status.isBlank() }
+                1 -> categoryTournaments.filter { it.status == "Live" || it.status == "Ongoing" }
                 else -> categoryTournaments.filter { it.status == "Completed" }
             }
 

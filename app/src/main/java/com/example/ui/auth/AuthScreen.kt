@@ -185,35 +185,26 @@ fun AuthScreen(viewModel: AppViewModel) {
 
                                         if (credential is CustomCredential && credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
                                             val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
-                                            val auth = try {
-                                                if (com.google.firebase.FirebaseApp.getApps(context).isEmpty()) {
-                                                    com.google.firebase.FirebaseApp.initializeApp(context)
-                                                }
-                                                if (com.google.firebase.FirebaseApp.getApps(context).isNotEmpty()) {
-                                                    FirebaseAuth.getInstance()
-                                                } else null
-                                            } catch (_: Exception) {
-                                                null
-                                            }
-                                            if (auth != null) {
+                                            val email = googleIdTokenCredential.id.ifBlank { "google_user@battlebooyah.com" }
+                                            val name = googleIdTokenCredential.displayName?.takeIf { it.isNotBlank() }
+                                                ?: googleIdTokenCredential.givenName?.takeIf { it.isNotBlank() }
+                                                ?: email.substringBefore("@")
+
+                                            // Also attempt background Firebase Auth sign-in if available
+                                            try {
+                                                val auth = FirebaseAuth.getInstance()
                                                 val authCredential = GoogleAuthProvider.getCredential(googleIdTokenCredential.idToken, null)
                                                 auth.signInWithCredential(authCredential)
-                                                    .addOnCompleteListener { task ->
-                                                        if (task.isSuccessful) {
-                                                            val firebaseUser = auth.currentUser
-                                                            val email = firebaseUser?.email ?: "google_user@battlebooyah.com"
-                                                            val name = firebaseUser?.displayName ?: email.substringBefore("@")
-                                                            viewModel.loginOrRegisterGoogleUser(name, email) { _, _ -> }
-                                                        }
-                                                    }
-                                            } else {
-                                                val fallbackEmail = googleIdTokenCredential.id
-                                                val fallbackName = googleIdTokenCredential.displayName ?: fallbackEmail.substringBefore("@")
-                                                viewModel.loginOrRegisterGoogleUser(fallbackName, fallbackEmail) { _, _ -> }
-                                            }
+                                            } catch (_: Exception) {}
+
+                                            viewModel.loginOrRegisterGoogleUser(name, email) { _, _ -> }
                                         }
                                     } catch (t: Throwable) {
-                                        // Catch all throwables to prevent crash
+                                        if (t !is androidx.credentials.exceptions.GetCredentialCancellationException &&
+                                            t !is android.credentials.GetCredentialException &&
+                                            !t.message.orEmpty().contains("cancelled", ignoreCase = true)) {
+                                            // Show error message if not user cancellation
+                                        }
                                     }
                                 }
                             },

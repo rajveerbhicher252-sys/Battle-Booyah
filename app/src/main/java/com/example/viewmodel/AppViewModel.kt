@@ -389,24 +389,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
             var user = userDao.getUserByUsernameOrEmail(username)
             if (user == null) {
-                // Auto-create user account on login if not registered yet
-                val emailOrUsername = if (username.contains("@")) username else "$username@battlebooyah.com"
-                val newUser = UserEntity(
-                    username = username,
-                    email = emailOrUsername,
-                    password = pass,
-                    walletBalance = 0.0
-                )
-                val id = userDao.insertUser(newUser)
-                user = userDao.getUserById(id)
+                _message.value = "Account not found! Please sign up first."
+                onResult(false, "Account not found! Please sign up first.")
+                return@launch
             } else if (user.password != pass) {
                 _message.value = "Invalid password"
                 onResult(false, "Invalid password")
-                return@launch
-            }
-            if (user == null) {
-                _message.value = "Login failed"
-                onResult(false, "Login failed")
                 return@launch
             }
             if (user.isBlocked) {
