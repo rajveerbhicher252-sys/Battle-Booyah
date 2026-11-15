@@ -670,6 +670,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun syncTournamentToFirestore(tournament: TournamentEntity) {
+        try {
+            val map = hashMapOf(
+                "id" to tournament.id,
+                "title" to tournament.title,
+                "gameName" to tournament.gameName,
+                "categoryId" to tournament.categoryId,
+                "entryFee" to tournament.entryFee,
+                "prizePool" to tournament.prizePool,
+                "perKill" to tournament.perKill,
+                "matchType" to tournament.matchType,
+                "version" to tournament.version,
+                "mapName" to tournament.mapName,
+                "maxSlots" to tournament.maxSlots,
+                "bannerImageUrl" to tournament.bannerImageUrl,
+                "matchTime" to tournament.matchTime,
+                "rules" to tournament.rules,
+                "status" to tournament.status,
+                "roomId" to (tournament.roomId ?: ""),
+                "roomPassword" to (tournament.roomPassword ?: ""),
+                "commissionPercent" to tournament.commissionPercent,
+                "winnerUserId" to (tournament.winnerUserId ?: 0L),
+                "createdAt" to tournament.createdAt
+            )
+            firestore?.collection("tournaments")?.document(tournament.id.toString())?.set(map)
+        } catch (e: Exception) {
+            // Safely ignore sync failures
+        }
+    }
+
     // Admin Tournament Actions
     fun createTournament(
         title: String,
@@ -706,30 +736,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 status = "Upcoming"
             )
             val id = tournamentDao.insertTournament(tournament)
+            val insertedTournament = tournament.copy(id = id)
             
             // Sync tournament to Firestore
-            val map = hashMapOf(
-                "id" to id,
-                "title" to tournament.title,
-                "gameName" to tournament.gameName,
-                "categoryId" to tournament.categoryId,
-                "entryFee" to tournament.entryFee,
-                "prizePool" to tournament.prizePool,
-                "perKill" to tournament.perKill,
-                "matchType" to tournament.matchType,
-                "version" to tournament.version,
-                "mapName" to tournament.mapName,
-                "maxSlots" to tournament.maxSlots,
-                "bannerImageUrl" to tournament.bannerImageUrl,
-                "matchTime" to tournament.matchTime,
-                "rules" to tournament.rules,
-                "status" to tournament.status,
-                "commissionPercent" to tournament.commissionPercent,
-                "createdAt" to tournament.createdAt
-            )
-            try {
-                firestore?.collection("tournaments")?.document(id.toString())?.set(map)
-            } catch (_: Exception) {}
+            syncTournamentToFirestore(insertedTournament)
 
             // Send notification that tournament registration is open
             val notif = NotificationEntity(
@@ -757,7 +767,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val t = tournamentDao.getTournamentById(tournamentId)
             if (t != null) {
-                tournamentDao.updateTournament(t.copy(roomId = roomId, roomPassword = roomPassword, status = "Live"))
+                val updated = t.copy(roomId = roomId, roomPassword = roomPassword, status = "Live")
+                tournamentDao.updateTournament(updated)
+                syncTournamentToFirestore(updated)
                 _message.value = "Room credentials updated & tournament marked Live!"
             }
         }
@@ -767,7 +779,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val t = tournamentDao.getTournamentById(tournamentId)
             if (t != null) {
-                tournamentDao.updateTournament(t.copy(rules = rules))
+                val updated = t.copy(rules = rules)
+                tournamentDao.updateTournament(updated)
+                syncTournamentToFirestore(updated)
                 _message.value = "Tournament rules updated successfully!"
             }
         }
@@ -776,6 +790,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun declareWinner(tournamentId: Long, winnerUserId: Long) {
         viewModelScope.launch {
             val res = repository.declareWinner(tournamentId, winnerUserId)
+            val t = tournamentDao.getTournamentById(tournamentId)
+            if (t != null) syncTournamentToFirestore(t)
             _message.value = res.exceptionOrNull()?.message ?: res.getOrNull()
         }
     }
@@ -785,6 +801,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val t = tournamentDao.getTournamentById(tournamentId)
             if (t != null) {
                 tournamentDao.deleteTournament(t)
+                try {
+                    firestore?.collection("tournaments")?.document(tournamentId.toString())?.delete()
+                } catch (_: Exception) {}
                 _message.value = "Tournament deleted."
             }
         }
