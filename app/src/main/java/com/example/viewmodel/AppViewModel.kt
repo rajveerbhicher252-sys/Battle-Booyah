@@ -380,6 +380,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private suspend fun firebaseSignUp(email: String, pass: String): Result<Unit> =
+        kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+            val auth = firebaseAuth
+            if (auth == null) {
+                continuation.resume(Result.success(Unit)) {}
+                return@suspendCancellableCoroutine
+            }
+            auth.createUserWithEmailAndPassword(email, pass)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        continuation.resume(Result.success(Unit)) {}
+                    } else {
+                        continuation.resume(Result.failure(task.exception ?: Exception("Sign up failed"))) {}
+                    }
+                }
+        }
+
+    private suspend fun firebaseSignIn(email: String, pass: String): Result<Unit> =
+        kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+            val auth = firebaseAuth
+            if (auth == null) {
+                continuation.resume(Result.success(Unit)) {}
+                return@suspendCancellableCoroutine
+            }
+            auth.signInWithEmailAndPassword(email, pass)
+                .addOnCompleteListener { task ->
+                    if (task.isSuccessful) {
+                        continuation.resume(Result.success(Unit)) {}
+                    } else {
+                        continuation.resume(Result.failure(task.exception ?: Exception("Login failed"))) {}
+                    }
+                }
+        }
+
     fun loginUser(username: String, pass: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             if ((username.lowercase() == "rajveerbhicher252@gmail.com" || username.lowercase() == "admin") && pass == "123456") {
@@ -394,24 +428,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 onResult(false, "Username and password are required!")
                 return@launch
             }
-            if (username.contains("@")) {
-                try {
-                    firebaseAuth?.signInWithEmailAndPassword(username, pass)
-                        ?.addOnFailureListener {
-                            try {
-                                firebaseAuth?.createUserWithEmailAndPassword(username, pass)
-                            } catch (_: Exception) {}
-                        }
-                } catch (_: Exception) {}
+            val loginEmail = if (username.contains("@")) username else {
+                val found = userDao.getUserByUsername(username)
+                found?.email ?: "$username@battlebooyah.com"
             }
+
+            val fbResult = firebaseSignIn(loginEmail, pass)
+            if (fbResult.isFailure) {
+                val err = fbResult.exceptionOrNull()?.localizedMessage ?: "Invalid email or password in Firebase"
+                _message.value = err
+                onResult(false, err)
+                return@launch
+            }
+
             var user = userDao.getUserByUsernameOrEmail(username)
             if (user == null) {
-                _message.value = "Account not found! Please sign up first."
-                onResult(false, "Account not found! Please sign up first.")
-                return@launch
-            } else if (user.password != pass) {
-                _message.value = "Invalid password"
-                onResult(false, "Invalid password")
+                val newUser = UserEntity(
+                    username = username.substringBefore("@"),
+                    email = loginEmail,
+                    password = pass,
+                    walletBalance = 0.0
+                )
+                val id = userDao.insertUser(newUser)
+                user = userDao.getUserById(id)
+            }
+            if (user == null) {
+                _message.value = "Account not found"
+                onResult(false, "Account not found")
                 return@launch
             }
             if (user.isBlocked) {
@@ -430,14 +473,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun loginOrRegisterGoogleUser(username: String, email: String, onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
-            try {
-                firebaseAuth?.signInWithEmailAndPassword(email, "google_auth_secure")
-                    ?.addOnFailureListener {
-                        try {
-                            firebaseAuth?.createUserWithEmailAndPassword(email, "google_auth_secure")
-                        } catch (_: Exception) {}
-                    }
-            } catch (_: Exception) {}
             var user = userDao.getUserByUsernameOrEmail(email) ?: userDao.getUserByUsernameOrEmail(username)
             if (user == null) {
                 val newUser = UserEntity(
@@ -475,10 +510,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 onResult(false, "This email or username is reserved for Admin!")
                 return@launch
             }
-            val existing = userDao.getUserByUsername(username)
+            val existing = userDao.getUserByUsername(username) ?: userDao.getUserByEmail(email)
             if (existing != null) {
-                _message.value = "Username already exists!"
-                onResult(false, "Username already exists!")
+                _message.value = "Username or Email already exists!"
+                onResult(false, "Username or Email already exists!")
                 return@launch
             }
             if (username.isBlank() || email.isBlank() || pass.isBlank()) {
@@ -487,14 +522,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 return@launch
             }
 
-            try {
-                firebaseAuth?.createUserWithEmailAndPassword(email, pass)
-                    ?.addOnFailureListener {
-                        try {
-                            firebaseAuth?.signInWithEmailAndPassword(email, pass)
-                        } catch (_: Exception) {}
-                    }
-            } catch (_: Exception) {}
+            val fbResult = firebaseSignUp(email, pass)
+            if (fbResult.isFailure) {
+                val err = fbResult.exceptionOrNull()?.localizedMessage ?: "Firebase Sign Up failed"
+                _message.value = err
+                onResult(false, err)
+                return@launch
+            }
 
             val newUser = UserEntity(
                 username = username,
