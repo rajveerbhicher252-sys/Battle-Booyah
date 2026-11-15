@@ -145,30 +145,37 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 val matchTime = doc.getString("matchTime") ?: ""
                                 val rules = doc.getString("rules") ?: ""
                                 val status = doc.getString("status") ?: "Upcoming"
+                                val roomId = doc.getString("roomId")
+                                val roomPassword = doc.getString("roomPassword")
+                                val winnerUserId = doc.getLongSafe("winnerUserId")
                                 val commissionPercent = doc.getDoubleSafe("commissionPercent", 20.0)
 
                                 val existing = tournamentDao.getTournamentById(id)
+                                val entity = TournamentEntity(
+                                    id = id,
+                                    title = title,
+                                    gameName = gameName,
+                                    categoryId = categoryId,
+                                    entryFee = entryFee,
+                                    prizePool = prizePool,
+                                    perKill = perKill,
+                                    matchType = matchType,
+                                    version = version,
+                                    mapName = mapName,
+                                    maxSlots = maxSlots,
+                                    bannerImageUrl = bannerImageUrl,
+                                    matchTime = matchTime,
+                                    rules = rules,
+                                    roomId = roomId,
+                                    roomPassword = roomPassword,
+                                    status = status,
+                                    commissionPercent = commissionPercent,
+                                    winnerUserId = winnerUserId
+                                )
                                 if (existing == null) {
-                                    tournamentDao.insertTournament(
-                                        TournamentEntity(
-                                            id = id,
-                                            title = title,
-                                            gameName = gameName,
-                                            categoryId = categoryId,
-                                            entryFee = entryFee,
-                                            prizePool = prizePool,
-                                            perKill = perKill,
-                                            matchType = matchType,
-                                            version = version,
-                                            mapName = mapName,
-                                            maxSlots = maxSlots,
-                                            bannerImageUrl = bannerImageUrl,
-                                            matchTime = matchTime,
-                                            rules = rules,
-                                            status = status,
-                                            commissionPercent = commissionPercent
-                                        )
-                                    )
+                                    tournamentDao.insertTournament(entity)
+                                } else {
+                                    tournamentDao.updateTournament(entity)
                                 }
                             }
                         } catch (ex: Exception) {
