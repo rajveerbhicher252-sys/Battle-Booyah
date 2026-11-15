@@ -56,17 +56,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             if (FirebaseApp.getApps(app).isEmpty()) {
                 FirebaseApp.initializeApp(app)
             }
-            if (FirebaseApp.getApps(app).isNotEmpty()) {
-                val dbId = try {
-                    app.getString(com.example.R.string.firestore_database_id)
+            val dbId = try {
+                app.getString(com.example.R.string.firestore_database_id)
+            } catch (_: Exception) {
+                ""
+            }
+            if (dbId.isNotBlank()) {
+                try {
+                    FirebaseFirestore.getInstance(dbId)
                 } catch (_: Exception) {
-                    ""
+                    FirebaseFirestore.getInstance()
                 }
-                if (dbId.isNotBlank()) FirebaseFirestore.getInstance(dbId)
-                else FirebaseFirestore.getInstance()
-            } else null
+            } else {
+                FirebaseFirestore.getInstance()
+            }
         } catch (e: Exception) {
-            null
+            try {
+                FirebaseFirestore.getInstance()
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
@@ -357,7 +366,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 "isAdmin" to user.isAdmin,
                 "createdAt" to user.createdAt
             )
-            firestore?.collection("users")?.document(user.email)?.set(map)
+            val docId = if (user.email.isNotBlank()) user.email else user.username
+            firestore?.collection("users")?.document(docId)?.set(map)
         } catch (e: Exception) {
             // Safely ignore sync failures
         }
